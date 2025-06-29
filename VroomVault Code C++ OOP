@@ -1,0 +1,277 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <thread>
+#include <chrono>
+#include <algorithm>
+
+using namespace std;
+
+#define RED     "\033[31m"
+#define GREEN   "\033[32m"
+#define YELLOW  "\033[33m"
+#define BLUE    "\033[34m"
+#define MAGENTA "\033[35m"
+#define CYAN    "\033[36m"
+#define RESET   "\033[0m"
+
+// Abstract base class for user
+class User {
+public:
+    virtual void displayMenu() = 0;
+    virtual ~User() {}
+};
+
+// Car class with encapsulation
+class Car {
+private:
+    string name, brand, color;
+    bool available;
+
+public:
+    Car(string n, string b, string c, bool a) : name(n), brand(b), color(c), available(a) {}
+
+    string getName() const { return name; }
+    string getBrand() const { return brand; }
+    string getColor() const { return color; }
+    bool isAvailable() const { return available; }
+
+    void setBrand(string b) { brand = b; }
+    void setColor(string c) { color = c; }
+    void setAvailability(bool a) { available = a; }
+
+    void display() const {
+        cout << "Name: " << name << ", Brand: " << brand << ", Color: " << color << ", Available: " << (available ? "Yes" : "No") << endl;
+    }
+};
+
+// Customer class with encapsulation
+class Customer {
+private:
+    string name, rentedCar;
+
+public:
+    Customer(string n, string r) : name(n), rentedCar(r) {}
+
+    string getName() const { return name; }
+    string getRentedCar() const { return rentedCar; }
+
+    void display() const {
+        cout << "Name: " << name << ", Rented Car: " << rentedCar << endl;
+    }
+};
+
+vector<Car> cars;
+vector<Customer> customers;
+
+class FileManager {
+public:
+    static void loadCars() {
+        ifstream fin("cars.txt");
+        string name, brand, color;
+        bool available;
+        while (fin >> name >> brand >> color >> available) {
+            cars.emplace_back(name, brand, color, available);
+        }
+        fin.close();
+    }
+
+    static void saveCars() {
+        ofstream fout("cars.txt");
+        for (auto &car : cars) {
+            fout << car.getName() << " " << car.getBrand() << " " << car.getColor() << " " << car.isAvailable() << endl;
+        }
+        fout.close();
+    }
+
+    static void loadCustomers() {
+        ifstream fin("customers.txt");
+        string name, rentedCar;
+        while (fin >> name >> rentedCar) {
+            customers.emplace_back(name, rentedCar);
+        }
+        fin.close();
+    }
+
+    static void saveCustomers() {
+        ofstream fout("customers.txt");
+        for (auto &customer : customers) {
+            fout << customer.getName() << " " << customer.getRentedCar() << endl;
+        }
+        fout.close();
+    }
+};
+
+class Admin : public User {
+private:
+    const string password = "admin123";
+public:
+    bool authenticate() {
+        string input;
+        cout << "Enter admin password: ";
+        cin >> input;
+        return input == password;
+    }
+
+    void displayMenu() override {
+        int choice;
+        while (true) {
+            cout << YELLOW << "\nAdmin Menu:\n1. View Cars\n2. Add Car\n3. Edit Car\n4. Remove Car\n5. View Customers\n6. Back\nChoice: " << RESET;
+            cin >> choice;
+
+            if (cin.fail()) {
+                cin.clear(); cin.ignore(1000, '\n');
+                cout << RED << "Invalid input.\n" << RESET;
+                continue;
+            }
+
+            if (choice == 1) {
+                for (auto &car : cars) car.display();
+            } else if (choice == 2) {
+                string name, brand, color;
+                bool available;
+                cout << "Enter name, brand, color, availability (1/0): ";
+                cin >> name >> brand >> color >> available;
+                cars.emplace_back(name, brand, color, available);
+                FileManager::saveCars();
+                cout << GREEN << "Car added.\n" << RESET;
+            } else if (choice == 3) {
+                string name;
+                cout << "Enter car name to edit: "; cin >> name;
+                for (auto &car : cars) {
+                    if (car.getName() == name) {
+                        string brand, color;
+                        bool avail;
+                        cout << "Enter brand, color, availability: ";
+                        cin >> brand >> color >> avail;
+                        car.setBrand(brand);
+                        car.setColor(color);
+                        car.setAvailability(avail);
+                        FileManager::saveCars();
+                        cout << GREEN << "Car updated.\n" << RESET;
+                        break;
+                    }
+                }
+            } else if (choice == 4) {
+                string name;
+                cout << "Enter car name to remove: ";
+                cin >> name;
+                bool removed = false;
+                for (auto it = cars.begin(); it != cars.end(); ++it) {
+                    if (it->getName() == name) {
+                        cars.erase(it);
+                        FileManager::saveCars();
+                        cout << GREEN << "Car removed.\n" << RESET;
+                        removed = true;
+                        break;
+                    }
+                }
+                if (!removed) cout << RED << "Car not found.\n" << RESET;
+            } else if (choice == 5) {
+                for (auto &cust : customers) cust.display();
+            } else if (choice == 6) {
+                break;
+            } else {
+                cout << RED << "Invalid option.\n" << RESET;
+            }
+        }
+    }
+};
+
+class CustomerUser : public User {
+public:
+    void displayMenu() override {
+        int choice;
+        while (true) {
+            cout << CYAN << "\nCustomer Menu:\n1. View Garage\n2. View Available\n3. Rent Car\n4. About\n5. Exit\nChoice: " << RESET;
+            cin >> choice;
+
+            if (cin.fail()) {
+                cin.clear(); cin.ignore(1000, '\n');
+                cout << RED << "Invalid input.\n" << RESET;
+                continue;
+            }
+
+            if (choice == 1) {
+                for (auto &car : cars) car.display();
+            } else if (choice == 2) {
+                for (auto &car : cars) if (car.isAvailable()) car.display();
+            } else if (choice == 3) {
+                string name, carName;
+                cout << "Enter your name: "; cin >> name;
+                cout << "Enter car to rent: "; cin >> carName;
+
+                transform(carName.begin(), carName.end(), carName.begin(), ::tolower);
+                bool found = false;
+                for (auto &car : cars) {
+                    string existingName = car.getName();
+                    transform(existingName.begin(), existingName.end(), existingName.begin(), ::tolower);
+                    if (existingName == carName && car.isAvailable()) {
+                        car.setAvailability(false);
+                        customers.emplace_back(name, car.getName());
+                        FileManager::saveCars();
+                        FileManager::saveCustomers();
+                        cout << GREEN << "Car rented!\n" << RESET;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) cout << RED << "Not available.\n" << RESET;
+            } else if (choice == 4) {
+                cout << CYAN << "\nVroomVault offers premium, reliable rentals.\n" << RESET;
+            } else if (choice == 5) {
+                break;
+            } else {
+                cout << RED << "Invalid choice.\n" << RESET;
+            }
+        }
+    }
+};
+
+void welcomeNote() {
+    string title = "WELCOME TO VROOMVAULT GARAGE!";
+    cout << MAGENTA << "\n====================================================\n";
+    for (char c : title) {
+        cout << c << flush;
+        this_thread::sleep_for(chrono::milliseconds(60));
+    }
+    cout << "\n====================================================\n" << RESET;
+    cout << CYAN << "\nThe future of smart, safe rentals starts here.\n" << RESET;
+    this_thread::sleep_for(chrono::milliseconds(500));
+}
+
+int main() {
+    FileManager::loadCars();
+    FileManager::loadCustomers();
+
+    welcomeNote();
+
+    while (true) {
+        int role;
+        cout << CYAN << "\nLogin as: 1. Admin  2. Customer  3. Exit\nChoice: " << RESET;
+        cin >> role;
+
+        if (cin.fail()) {
+            cin.clear(); cin.ignore(1000, '\n');
+            cout << RED << "Invalid input.\n" << RESET;
+            continue;
+        }
+
+        if (role == 1) {
+            Admin admin;
+            if (admin.authenticate()) admin.displayMenu();
+            else cout << RED << "Incorrect password.\n" << RESET;
+        } else if (role == 2) {
+            CustomerUser cust;
+            cust.displayMenu();
+        } else if (role == 3) {
+            cout << YELLOW << "Thanks for using VroomVault!\n" << RESET;
+            break;
+        } else {
+            cout << RED << "Invalid option.\n" << RESET;
+        }
+    }
+
+    return 0;
+}
